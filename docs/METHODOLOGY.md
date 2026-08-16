@@ -2,8 +2,8 @@
 
 Geostatistical ground modelling of normalised cone tip resistance ($Q_{tn}$) across an
 offshore wind farm site. This document defines the notation, the generative model behind the
-synthetic dataset, the estimators, the validation harness, and the mapping of real data onto
-the same contract. Every equation here is the one the code implements; where a library
+synthetic dataset, the estimators, the validation harness, the $Q_{tn} \leftrightarrow q_t$
+transform, and the mapping of real data onto the same contract. Every equation here is the one the code implements; where a library
 convention was verified empirically rather than assumed, that is noted.
 
 ---
@@ -360,7 +360,74 @@ understate the floor by nearly a factor of two.
 
 ---
 
-## 5. Real data (IJmuiden Ver)
+## 5. The $Q_{tn} \leftrightarrow q_t$ transform
+
+The model is fitted on $\log Q_{tn}$; a design is specified in $q_t$. Robertson's
+normalisation, with atmospheric pressure $p_a$, total overburden $\sigma_{v0}$ and effective
+overburden $\sigma'_{v0}$, is
+
+$$Q_{tn} = \frac{q_t - \sigma_{v0}}{p_a}\left(\frac{p_a}{\sigma'_{v0}}\right)^{n},
+\qquad\text{inverted}\qquad
+q_t = \sigma_{v0} + c(z)\,Q_{tn}, \quad c(z) = p_a\left(\frac{\sigma'_{v0}}{p_a}\right)^{n}.$$
+
+Two properties carry the uncertainty across intact:
+
+- **Affinity.** At fixed depth $q_t$ is affine in $Q_{tn}$, so a lognormal $Q_{tn}$ gives a
+  shifted, scaled lognormal $q_t$: median, mean and sd are closed-form, $\text{sd}$ scales
+  with $c(z)$, and the shift by $\sigma_{v0}$ moves only the mean.
+- **Monotonicity.** Band edges transform exactly. A 95% band in $\log Q_{tn}$ is a 95% band
+  in $q_t$, so measured coverage carries over unchanged (0.956 on IJmuiden either side of
+  the conversion).
+
+$q_t$ is right-skewed at these sds — the upper arm of the 95% band is 2–3× the lower — so
+quantiles are the interval and $\text{sd}_{q_t}$ is a moment for propagation, not half a
+band. A constant $Q_{tn}$ through a unit de-normalises to a $q_t$ rising linearly with
+depth, so a per-unit prediction is a line, not a number.
+
+### 5.1 The stress exponent
+
+$n$ must be the exponent that *made* the supplied column. Inverting an $n=1$ column as if it
+were $n=0.5$ is wrong by a factor of 2–3, and wrong in a way that varies with depth, so it
+reads as stratigraphy rather than as an error. `cpt.infer_gamma_eff` recovers the effective
+unit weight (and checks the exponent) from an export carrying both $q_t$ and $Q_t$.
+
+To *estimate* an exponent, `cpt.soil_behaviour_index` runs Robertson's iteration to
+convergence:
+
+$$I_c = \sqrt{(3.47 - \log_{10} Q_{tn})^2 + (\log_{10} F_r + 1.22)^2}, \qquad
+  n = 0.381\,I_c + 0.05\,\frac{\sigma'_{v0}}{p_a} - 0.15, \quad n \le 1.$$
+
+It needs sleeve friction, so it belongs at preparation time: the contract keeps $Q_{tn}$ and
+drops both $q_t$ and $f_s$, which is why the transform takes $n$ as an input. $n$ may be a
+scalar or a per-unit mapping.
+
+### 5.2 An uncertain exponent
+
+Write $L = \log(\sigma'_{v0}/p_a)$, so that $c(z) = p_a e^{nL}$. A Gaussian
+$n \sim N(\bar n, s_n^2)$ contributes a *lognormal factor*, and a product of lognormals is
+lognormal:
+
+$$\log(q_t - \sigma_{v0}) \sim N\!\left(\log p_a + \bar n L + \mu,\;\; \sigma^2 + (s_n L)^2\right).$$
+
+So $q_t$ remains a shifted lognormal, every closed form still holds, and the only change is
+a wider log-sd combined in quadrature. Verified against a 2M-draw simulation to 3–4
+significant figures at five depths.
+
+$L$ is the whole lever and is **zero at $\sigma'_{v0} = p_a$** — 9.9 m below seabed on
+IJmuiden's gradient. At that depth the exponent is irrelevant; away from it the doubt grows
+logarithmically in both directions. $s_n = 0.1$ adds 0.30 to the log-sd at 0.5 m and 0.18 at
+60 m, against a between-hole $\log Q$ sd of 0.31–0.71.
+
+Two caveats. The closed form assumes $n \perp Q_{tn}$, whereas Robertson's $n$ is a function
+of $I_c$ which is a function of $Q_{tn}$ — sample instead if the dependence matters. And a
+Gaussian $n$ ignores the $n \le 1$ cap, so for a unit sitting at the cap the upper half of
+the assumed spread is unphysical. Setting $s_n > 0$ therefore sets
+`coverage_transfers = False`: the measured $q_t$ is itself conditional on the central $n$,
+so a band widened for exponent doubt is no longer scored fairly against it.
+
+---
+
+## 6. Real data (IJmuiden Ver)
 
 Real exports are wrangled onto the same contract per project, outside the package.
 `cpt_geostat` consumes only `cpt_samples` (`cpt_id, x, y, z, unit_id, Qtn`) and `layers`
@@ -395,7 +462,7 @@ Mapping decisions for IJmuiden (IJ56):
 
 ---
 
-## 6. Stated limitations
+## 7. Stated limitations
 
 - **Inverse crime.** gstools both generates and fits the synthetic fields, so recovery
   numbers are optimistic; the planned sklearn GP and pykrige cross-checks are the mitigation.

@@ -119,6 +119,10 @@ CODE_SECTIONS = [
 DOC_SECTIONS = [
     ("Reference documents", [
         "README.md",
+        "docs/USAGE.md",
+        "docs/DECISIONS.md",
+        "docs/RESULTS.md",
+        "docs/METHODOLOGY.md",
         "projects/IJmuiden/README.md",
         "cpt_gp_plan.md",
         "plans/02_estimators_and_validation.md",
