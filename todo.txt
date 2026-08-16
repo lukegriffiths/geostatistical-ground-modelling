@@ -1,0 +1,44 @@
+Refactor to have example separate from the true data analysis
+    - I still think this can be better - need to separate the output of the synthetic into something clearer than /run
+Documentation explaining methodology with example images
+Generation of synthetic CPT data at a given location with given unitisation
+interpolation of surfaces
+    - kriging or other methods to get depths of unit horizons
+    - uncertainty on the depths (will be greater where distances are greater)
+    - how to blend the uncertainty of boundaries with the parameter uncertainty
+
+Done
+Renamed cptgp -> cpt_geostat (distribution and CLI command 'cpt-geostat'). The package
+    is now pip install -e . rather than import-by-cwd, so the command works from a
+    project directory instead of only the repo root
+Shared preparation pipeline (cpt_geostat/prepare.py): run detection, contacts at
+    midpoints, collapsing repeated units, depth-averaging, sliver filters and the
+    metadata file, driven by a PrepareConfig of per-site declarations. IJmuiden's
+    prepare_data.py went 413 -> 122 lines and reproduces all five tables byte-identically
+    on the real export. tests/test_prepare.py (25 tests) pins the geometry rules that
+    were previously untested - each against the plausible-looking wrong answer, since
+    a contact placed on a reading rather than between two is invisible in any output
+Anisotropy (cpt_geostat/models/anisotropy.py): profile likelihood over the major-axis azimuth,
+    per plan 03's chosen method but without sklearn and scanning 0-180 (the plan's 0-90
+    belongs to unordered ARD). Wired into kriging as 'OK (aniso)' behind --anisotropy,
+    gated per unit on a simulated null.
+    On the contrast set it rejects all 4 isotropic units and MISSES both anisotropic
+    ones - no useful power at n=31-58. Fixing two bugs (null simulated without its
+    nugget; the range/nugget ridge left the isotropic reference under-fitted) LOWERED
+    every LR and turned unit 4 from a detection into a miss. Worth revisiting only with
+    denser data or a unit whose minor axis the survey actually samples
+Transformation back to qt: cpt_geostat/cpt.py (StressProfile, qt_from_qtn, qt_moments),
+    models.profile.qt_readings / qt_by_unit. IJmuiden's normalisation is n = 1 with
+    gamma_sat 20.1 / gamma_w 10.0, fitted from the export and now recorded in
+    prepare_metadata.json
+qt profile figures: a second suite alongside Qtn, in profiles/<model>/qt and
+    profiles/<model>/Qtn. --profile-units picks; --stress-profile overrides the
+    metadata for datasets that record none (the synthetic ones, which have no qt)
+Variable stress exponent: n may be per-unit or uncertain. cpt.soil_behaviour_index
+    runs Robertson's Ic iteration to derive it (IJmuiden: sands 0.48-0.72, clays
+    0.80-0.98); a Gaussian n keeps qt lognormal, so total_log_sd just adds
+    (n_sd * log(sigma'v0/pa))^2 in quadrature. Pivot depth 9.9 m, where n stops
+    mattering entirely
+IJV data analysis in projects/IJmuiden
+    - G:\My Drive\Code\geostatistical-ground-modellling\data\cpt_dataframe.csv
+    - Use coords (Easting, Northing - in m), ID (Location_ID_ind), units (soil_unit) and Qt (Qt)

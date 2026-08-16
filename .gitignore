@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+
+# Editor / OS
+.DS_Store
+.idea/
+
+# Inputs and pipeline outputs (top level)
+/data/
+/run/
+/figures/
+
+# Per-project inputs and outputs; README.md and prepare_data.py stay tracked
+projects/*/data/
+projects/*/figures/
+projects/*/models/
